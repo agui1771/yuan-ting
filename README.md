@@ -83,16 +83,45 @@ thoughts/
 
 ## 四、怎么跑
 
-Python 3 标准库为主；`电波.py build` 需要 `mpmath`。
+Python 3 标准库为主；只有 `电波.py build` 需要 `mpmath`（算常数用的）。
 
 ```bash
+# 0) 只有 build 要这个。不想装别的，就装到临时目录，不碰系统环境。
+python3 -m pip install --target ./pylib mpmath
+export PYTHONPATH=$PWD/pylib
+
 export DSH_ROOT=~/dsh          # 数据根目录，默认 /sdcard/dsh
+
+# 1) 建数字池：九个常数各取 3000 位。**要两分钟**，其中 g1 一项就占两分多钟。
 python3 thoughts/tools/电波.py build
+
+# 2) 把词挂到符号上。没准备自己的词表也行 —— 仓库带了一份占位表。
+python3 thoughts/tools/解读.py build
+
+# 3) 掉一条、校验、看游标
 python3 thoughts/tools/偏斜.py tick        # 掉一条
 python3 thoughts/tools/偏斜.py verify      # 重算全部：串、词、链、轨迹有没有断
 python3 thoughts/tools/偏斜.py cursor      # 九个常数各走到哪
-python3 thoughts/tools/穿过.py run --n 10
 ```
+
+**关于词表。** `解读.py build` 要一份"自创表"：键是词，值是 `{根, 首见, 状态, 用了几次}`。
+真表是写这套东西的人自己攒的 89 条，属于私货，没上传。仓库里放了一份
+`memory/example-自创表.json`：**结构、条数、字段全一样，内容是与私人无关的通用词**，
+只为让整条链跑得通。想用自己的，写一份同结构的 JSON：
+
+```bash
+python3 thoughts/tools/解读.py build --self /path/to/你的自创表.json
+```
+
+**注意：表挂上就定死了。** 改表不是"修"，是换一代——原来那些原产物就解不回同样的词了。
+这是故意的，`解读.py` 会拒绝二次 `build`。
+
+**关于「穿过」。** 它要拿真实记忆当锚点，仓库里没有（那是私人的）。
+没有记忆库时它会明确报错退出，不静默建空库。想自己接，放一份
+`$DSH_ROOT/memory（记忆库）/结论库.jsonl`（每行一条 JSON，至少含 `entity`、`text`、`timestamp`）。
+
+**整个跑通的机器那部分**只需要：`build` → `解读.py build` → `偏斜.py tick` → `verify`。
+剩下「落点、解读、判断」那几步要人，本来就不是脚本能替的。
 
 ## 五、这些东西的来历
 
