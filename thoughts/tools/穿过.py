@@ -28,7 +28,7 @@ db = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(db)
 
 F_TABLE = db.F_TABLE
-ROOT = os.environ.get("DSH_ROOT", "<DSH_ROOT>")
+ROOT = os.environ.get("DSH_ROOT", "/sdcard/dsh")
 SELF_TABLE = os.path.join(ROOT, "memory（记忆库）/词表/自创表.json")
 MEM_DB = os.path.join(ROOT, "memory（记忆库）/结论库.jsonl")
 STREAM = os.path.join(ROOT, "thoughts（念头）/偏斜/流.jsonl")
@@ -40,6 +40,12 @@ STOP = {"生", "三", "形", "度", "隙", "混沌", "临界", "生数", "万物
 
 def anchors():
     """锚点池：实体 / 小标签 / 大标签 → 最近一条记忆"""
+    if not os.path.exists(MEM_DB):
+        sys.exit("找不到记忆库：%s\n"
+                 "  「穿过」要用真实记忆当锚点，仓库里没带（那是私人的）。\n"
+                 "  想单独试机器那条腿，先跑 偏斜.py tick 看原产物；\n"
+                 "  想接自己的库，就把 DSH_ROOT 指过去，或在那里放一份结论库.jsonl。"
+                 % MEM_DB)
     out = {}
     for line in open(MEM_DB, encoding="utf-8"):
         line = line.strip()

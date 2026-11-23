@@ -22,21 +22,46 @@ db = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(db)
 
 F_TABLE = db.F_TABLE
-ROOT = os.environ.get("DSH_ROOT", "<DSH_ROOT>")
+ROOT = os.environ.get("DSH_ROOT", "/sdcard/dsh")
 SELF_TABLE = os.path.join(ROOT, "memory（记忆库）/词表/自创表.json")
+# 仓库里带一份占位词表（与真表同结构、同条数，内容与「我」无关）。
+# 找不到自己的词表时用它，好让整条链能跑通；真词在 DSH_ROOT 里那份。
+EXAMPLE_TABLE = os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                             "memory", "example-自创表.json")
 SEED = "表v2|20261123"
 
 
-def load_words():
-    d = db.read_json(SELF_TABLE)
+def _resolve_self_table(explicit=None):
+    if explicit:
+        return explicit
+    if os.path.exists(SELF_TABLE):
+        return SELF_TABLE
+    if os.path.exists(EXAMPLE_TABLE):
+        sys.stderr.write(
+            "！没找到你的词表 %s\n"
+            "  先用仓库里的占位词表跑通：%s\n"
+            "  想用自己的，写一份同结构的 JSON，再 --self <路径>\n"
+            % (SELF_TABLE, EXAMPLE_TABLE))
+        return EXAMPLE_TABLE
+    sys.exit("词表找不到：%s（仓库里也没有占位的 example-自创表.json）" % SELF_TABLE)
+
+
+def load_words(explicit=None):
+    p = _resolve_self_table(explicit)
+    d = db.read_json(p)
     return [k for k in d if not k.startswith("_")]
 
 
 def cmd_build(args):
+    self_path = None
+    for i, a in enumerate(args):
+        if a == "--self":
+            self_path = args[i + 1]
     t = db.read_json(F_TABLE)
     if "words" in t:
-        sys.exit("表已经挂过词了，不改——改表就是新的一代，不是修。")
-    words = load_words()
+        sys.exit("表已经挂过词了，不改——改表就是新的一代，不是修。"
+                 "真要重来，删掉 origin/表.json 里的 words 再 build。")
+    words = load_words(self_path)
     order = db.Stream(SEED).shuffled(db.SYMBOLS)
     if len(words) > len(order):
         sys.exit("词比符号多")
@@ -48,8 +73,9 @@ def cmd_build(args):
     listed = [words_of[s] for s in db.SYMBOLS]
     t["words"] = words_of
     t["words_sha256"] = db.sha(listed)
-    t["words_note"] = ("81 条自创词挂在 81 个符号上，19 个符号留空。"
-                       "定死。改表＝新的一代，不是修。")
+    t["words_note"] = ("%d 条词挂在 %d 个符号上，%d 个符号留空（读作 □）。"
+                       "定死。改表＝新的一代，不是修。"
+                       % (len(words), len(words), len(listed) - len(words)))
     db.write_json(F_TABLE, t, backup=True)
     print("挂好了：%d 条词，%d 个空位，seed=%s" % (
         sum(1 for v in listed if v), sum(1 for v in listed if not v), SEED))
@@ -57,8 +83,13 @@ def cmd_build(args):
 
 
 def cmd_show(args):
-    if not args:
-        sys.exit("用法：解读.py show <编号>")
+    want = None
+    for i, a in enumerate(args):
+        if a == "--self":
+            continue
+        want = a
+    if not want:
+        sys.exit("用法：解读.py show <编号> [--self <词表.json>]")
     want = args[0]
     t = db.read_json(F_TABLE)
     words_of = t["words"]

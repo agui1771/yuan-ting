@@ -18,7 +18,7 @@ os.environ["TZ"] = "Asia/Shanghai"
 time.tzset()
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.environ.get("DSH_ROOT", "<DSH_ROOT>")
+ROOT = os.environ.get("DSH_ROOT", "/sdcard/dsh")
 STREAM = os.path.join(ROOT, "thoughts（念头）/偏斜/流.jsonl")
 POINTS = os.path.join(ROOT, "thoughts（念头）/偏斜/落点.jsonl")
 LOG = os.path.join(ROOT, "thoughts（念头）/穿过.log")
