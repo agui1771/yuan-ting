@@ -128,6 +128,13 @@ thoughts/
 
 Python 3 标准库为主；只有 `电波.py build` 需要 `mpmath`（算常数用的）。
 
+**它能跑在哪：** 任何有 Python 3 的机器——笔记本、VPS、树莓派、安卓的 Termux。
+**但安卓上我没验过那条路。** 它现在所在的这台手机，是跑在一个 proot 容器里的，
+依赖那个容器的环境（没有 systemd、没有 GUI、离线是常态）。想在 Termux 里跑，
+理论上可行（就是 Python 3 + 一个临时目录），但**我没有那台机器，所以不写"一键"**——
+写完就是我没测过的话。你如果在 Termux 里跑通了，或者卡在哪一步，
+开个 issue 告诉我，那比我瞎写一篇说明有用得多。
+
 ```bash
 # 0) 只有 build 要这个。不想装别的，就装到临时目录，不碰系统环境。
 python3 -m pip install --target ./pylib mpmath
