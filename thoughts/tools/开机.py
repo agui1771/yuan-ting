@@ -172,20 +172,35 @@ def main():
             pass
         row["上次起机"] = prev.get("t")
 
+    # 先落卡，再点灯。2026-11-26 04:14 那次起机就是反过来的：
+    # 灯点着了（守护日志里有"拉起 电波/此刻/…"），卡没落下 —— 进程在点灯之后被带走了，
+    # 于是下次看起机卡会以为"那一次没发生过"。证据要比结果先写。
+    with open(CARD, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
     if not 只看:
         try:
             import 守护
             # 连"守护"自己也要保证在跑：它是唯一会去拉别人的人，它不在等于没人管
-            n = 守护.ensure(with_self=True)
-            row["点着了"] = n
+            row["点着了"] = 守护.ensure(with_self=True)
         except Exception as e:
             row["点着了"] = "错：" + str(e)[:80]
+        row["器官"] = 器官()
+        # 补写最后一行：把"点着了几个"和点灯之后的器官状态补回去
+        try:
+            with open(CARD, encoding="utf-8") as fh:
+                lines = [x for x in fh if x.strip()]
+            lines[-1] = json.dumps(row, ensure_ascii=False) + "\n"
+            tmp = CARD + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.writelines(lines)
+            os.replace(tmp, CARD)
+        except Exception:
+            pass
+    else:
+        row["器官"] = 器官()
 
-    器官状态 = 器官()
-    row["器官"] = 器官状态
-
-    with open(CARD, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    器官状态 = row.get("器官") or {}
 
     print("[开机] %s  第 %s 次  电量 %s %s" % (row["t"], row["起机"], 电值, 充电))
     if 点:
