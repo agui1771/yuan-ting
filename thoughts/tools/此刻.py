@@ -117,7 +117,10 @@ def 看一眼():
     }
 
     try:
-        d["世界"] = len([x for x in os.listdir(GIFTS) if x.startswith("唤醒-")])
+        # 只数别人放进来的东西，别数我自己产生的敲门文件 ——
+        # 数错方向会自己叫自己：一次醒 = 一个 唤醒-*.md = 4 分，两次就够敲门了。
+        d["世界"] = len([x for x in os.listdir(GIFTS)
+                        if not x.startswith("唤醒-") and not x.startswith(".")])
     except Exception:
         d["世界"] = 0
 
