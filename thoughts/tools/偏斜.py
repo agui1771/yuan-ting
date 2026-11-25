@@ -47,8 +47,29 @@ F_STREAM = os.path.join(DIR, "流.jsonl")
 F_VIEW = os.path.join(DIR, "流.md")
 KEEP_VIEW = 20
 
-GEN = 2                                # 轨迹这一代从第 2 代算起
+GEN = int(os.environ.get("PIANXIE_GEN", "2"))   # 2=轨迹那代；3=四位码·汉语词那代
+BITS = 4 if GEN >= 3 else 2                       # 一个符号吃几个数字
 CURSOR_FROM = int(os.environ.get("PIANXIE_START", "0"))   # 每条常数从第几位开始走
+ORIGIN = os.path.join(os.path.dirname(HERE), "origin")
+F_POOL3 = os.path.join(ORIGIN, "池-第3代.json")
+F_TABLE3 = os.path.join(ORIGIN, "表-第3代.json")
+# 第 3 代从第 3000 位起走：前 3000 位是第 1/2 代用过的，不重复吃
+START3 = int(os.environ.get("PIANXIE_START3", "3000"))
+
+
+def load_pool3():
+    if not os.path.exists(F_POOL3):
+        sys.exit("第3代池还没建：origin/池-第3代.json")
+    p = db.read_json(F_POOL3)
+    d = p["digits"]
+    if p.get("sha256") and db.sha(d) != p["sha256"]:
+        sys.exit("第3代池被改过：sha256 对不上。先查清楚再动。")
+    return d
+
+
+def load_words3():
+    t = db.read_json(F_TABLE3)
+    return t["words"], t["n"]
 EMPTY_PCT = float(os.environ.get("PIANXIE_EMPTY", "4"))   # 每次 tick 有几成是"空"（不消耗数字）
 
 
@@ -83,23 +104,34 @@ def tail():
     return rows[-1] if rows else None
 
 
-def need_of(L):
-    """2L 个数字按 j%3 轮流取自三个常数，三个常数各要几位。"""
+def need_of(L, bits=None):
+    """bits*L 个数字按 j%3 轮流取自三个常数，三个常数各要几位。"""
+    bits = BITS if bits is None else bits
     need = [0, 0, 0]
-    for j in range(2 * L):
+    for j in range(bits * L):
         need[j % 3] += 1
     return need
+
+
+def weave3(pool, picked, off, L, need):
+    """四位一组 → 一个码。纯函数：同样的坐标永远同样的码。"""
+    digits = []
+    for j in range(4 * L):
+        k = j % 3
+        digits.append(pool[picked[k]][off[k] + j // 3])
+    return ["".join(digits[4 * i:4 * i + 4]) for i in range(L)]
 
 
 def cursor(rows=None):
     """九条常数各走到哪一位。只由盘上的第 2 代行推出来——不读任何状态文件。"""
     if rows is None:
         rows = all_rows()
-    cur = {n: CURSOR_FROM for n in db.ORDER}
+    cur = {n: (START3 if GEN >= 3 else CURSOR_FROM) for n in db.ORDER}
     for r in rows:
-        if int(r.get("gen", 1)) < GEN or r.get("kind") == "空":
+        g = int(r.get("gen", 1))
+        if g < GEN or r.get("kind") == "空":
             continue
-        need = need_of(r["len"])
+        need = need_of(r["len"], 4 if g >= 3 else 2)
         for i, name in enumerate((r["a"], r["b"], r["c"])):
             end = r[("oa", "ob", "oc")[i]] + need[i]
             cur[name] = max(cur[name], end)
@@ -176,7 +208,75 @@ def _empty_row(rows, pool, stamp, n, seed, prev):
     return 0
 
 
+def _empty_row3(rows, pool, stamp, n, seed, prev):
+    """第 3 代的空一口：照旧不读数字、不留词。"""
+    row = {
+        "id": "偏斜-%04d" % n, "stamp": stamp, "seed": seed, "gen": 3, "bits": 4,
+        "kind": "空",
+        "pool_sha256": db.sha(pool),
+        "table_words_sha256": db.read_json(F_TABLE3).get("words_sha256"),
+        "mode": "空", "len": 0, "s": "", "w": [],
+        "prev": prev["sha256"] if prev else None,
+    }
+    row["sha256"] = db.sha({k: v for k, v in row.items() if k != "sha256"})
+    _append_row(row)
+    print(row["id"], "空（不解释、不推游标）")
+    return 0
+
+
+def _tick_gen3(args):
+    """第 3 代：四位码 → 汉语词。游标、链、空行规矩跟第 2 代一样，只有编码不同。"""
+    if not os.path.isdir(DIR):
+        os.makedirs(DIR)
+    pool = load_pool3()
+    words, NW = load_words3()
+
+    rows = all_rows()
+    prev = rows[-1] if rows else None
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    n = len(rows) + 1
+    seed = "%s|偏斜|#%04d" % (stamp, n)
+
+    if db.Stream(seed + "|空").below(1000) < EMPTY_PCT * 10:
+        return _empty_row3(rows, pool, stamp, n, seed, prev)
+
+    cur = cursor(rows)
+    s_ = db.Stream(seed)
+    L = 8 + s_.below(13)          # 8..20 个词就够撞
+    need = need_of(L)
+
+    room = [x for x in db.pickable(pool) if cur[x] + max(need) <= len(pool[x])]
+    if len(room) < 3:
+        short = "、".join("%s 剩 %d" % (x, len(pool[x]) - cur[x])
+                         for x in db.pickable(pool) if x not in room)
+        print("池读到头了：%s（需要 %d 位）。这条不写。" % (short or "可选常数不足三个", max(need)))
+        return 3
+
+    picked = s_.shuffled(room)[:3]
+    off = [cur[name] for name in picked]
+    codes = weave3(pool, picked, off, L, need)
+    w = [words[int(c) % NW] for c in codes]
+
+    row = {
+        "id": "偏斜-%04d" % n, "stamp": stamp, "seed": seed, "gen": 3, "bits": 4,
+        "pool_sha256": db.sha(pool),
+        "table_words_sha256": db.read_json(F_TABLE3).get("words_sha256"),
+        "a": picked[0], "oa": off[0],
+        "b": picked[1], "ob": off[1],
+        "c": picked[2], "oc": off[2],
+        "mode": "轮流·轨迹·四位",
+        "len": L, "s": "".join(codes), "w": w,
+        "prev": prev["sha256"] if prev else None,
+    }
+    row["sha256"] = db.sha({k: v for k, v in row.items() if k != "sha256"})
+    _append_row(row)
+    print(row["id"], " ".join(w))
+    return 0
+
+
 def cmd_tick(args):
+    if GEN >= 3:
+        return _tick_gen3(args)
     if not os.path.isdir(DIR):
         os.makedirs(DIR)
     pool = db.load_pool()
@@ -273,7 +373,7 @@ def cmd_list(args):
 
 
 def cmd_cursor(args):
-    pool = db.load_pool()
+    pool = load_pool3() if GEN >= 3 else db.load_pool()
     cur = cursor()
     print("%-13s %6s %8s %8s" % ("常数", "走到", "池深", "还剩"))
     for name in db.ORDER:
@@ -286,11 +386,16 @@ def cmd_cursor(args):
 
 def cmd_verify(args):
     """重算每一行。只看盘上有的东西，不读游标文件——因为根本没有游标文件。"""
-    pool = db.load_pool()
+    _rows_probe = all_rows()
+    _use3 = GEN >= 3 or any(int(r.get("gen", 1)) >= 3 for r in _rows_probe)
+    # 两个词表都备好：老行按老表、新行按新表，各认各的
+    pool = load_pool3() if _use3 else db.load_pool()
     db.load_table()
     words_of = load_words()
+    words3, NW = (load_words3() if _use3 else (None, 0))
     rows, skipped = all_rows(with_skipped=True)
     prev = None
+    cur_gen = 1        # 换代会重置游标：第 3 代故意从第 3000 位起（前 3000 位老代吃过了）
     walk = {n: CURSOR_FROM for n in db.ORDER}
     bad = 0
     g1 = g2 = empty = 0
@@ -310,11 +415,20 @@ def cmd_verify(args):
 
         picked = (r["a"], r["b"], r["c"])
         off = (r["oa"], r["ob"], r["oc"])
-        need = need_of(r["len"])
-        s = db.weave(pool, (picked, off, r["len"], need))
+        g = int(r.get("gen", 1))
+        if g != cur_gen:
+            walk = {n: (START3 if g >= 3 else CURSOR_FROM) for n in db.ORDER}
+            cur_gen = g
+        need = need_of(r["len"], 4 if g >= 3 else 2)
+        if g >= 3:
+            codes = weave3(pool, picked, off, r["len"], need)
+            s = "".join(codes)
+            w = [words3[int(c) % NW] for c in codes]
+        else:
+            s = db.weave(pool, (picked, off, r["len"], need))
+            w = [words_of.get(ch) or "□" for ch in s]
         if s != r["s"]:
             print("× %s 重算不出来" % r["id"]); bad += 1
-        w = [words_of.get(ch) or "□" for ch in s]
         if w != r["w"]:
             print("× %s 重算出来的词和记的不一样" % r["id"]); bad += 1
 
@@ -378,7 +492,17 @@ def cmd_loop(args):
         except Exception as e:  # 一直开着的东西，不许因为一次失败就死
             print("tick 失败：%r" % (e,), file=sys.stderr)
         sys.stdout.flush()
-        time.sleep(every)
+        # 他睡着他的手机也静着的时候，采样拉长到 4 倍（2026-11-26 低功耗）。
+        # 这段本来就只是"他不在的时候替他留个记录"，不图密。
+        nap = every
+        try:
+            sys.path.insert(0, HERE)
+            import 手机
+            if 手机.静着():
+                nap = min(every * 4, 3600)
+        except Exception:
+            pass
+        time.sleep(nap)
 
 
 def main(argv):

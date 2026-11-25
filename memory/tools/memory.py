@@ -42,15 +42,15 @@ def _default_db():
     if os.environ.get("DSH_MEMORY_DB"):
         return os.environ["DSH_MEMORY_DB"]
     if os.path.isdir("/sdcard"):
-        return os.path.join(os.environ.get("DSH_ROOT", "/sdcard/dsh"), "memory（记忆库）", "memory_db.json")
+        return "/sdcard/dsh/memory（记忆库）/memory_db.json"
     return os.path.join(os.path.expanduser("~"), ".dsh", "memory", "memory_db.json")
 
 
 DB = _default_db()
 
-# ── 升级迁移（2026-11-06，主人指出的洞）───────────────────────────
-# 0.10.x 默认库：<DSH_ROOT>/memory/memory_db.json
-# 0.11   默认库：<DSH_ROOT>/memory（记忆库）/memory_db.json  ← 目录名多了四个字
+# ── 升级迁移（2026-11-06，如归指出的洞）───────────────────────────
+# 0.10.x 默认库：/sdcard/dsh/memory/memory_db.json
+# 0.11   默认库：/sdcard/dsh/memory（记忆库）/memory_db.json  ← 目录名多了四个字
 #
 # 原来那半截 no-silent-empty 有两个洞：
 #   ① 只在「父目录已存在」时才出声 —— 升级后新目录本来就不存在，一声不吭；
@@ -61,11 +61,11 @@ DB = _default_db()
 # 现在的规矩：能搬就搬（原库保留），搬不了就报错，**绝不静默建空库**。
 _OLD_DB_PATHS = [p for p in (os.environ.get("DSH_MEMORY_OLD_DB") or "").split(":") if p]
 _OLD_DB_PATHS += [
-    os.path.join(os.environ.get("DSH_ROOT", "/sdcard/dsh"), "memory", "memory_db.json"),
+    "/sdcard/dsh/memory/memory_db.json",
     # 打过分库补丁（--space）的机器，库在 spaces/<名字>/ 下面，不在顶层。
     # 不扫这里，他们升级后看到的会是空库 —— 而这一步以前要人手动指定。
-    os.path.join(os.environ.get("DSH_ROOT", "/sdcard/dsh"), "memory", "spaces", "*", "memory_db.json"),
-    os.path.join(os.environ.get("DSH_ROOT", "/sdcard/dsh"), "memory（记忆库）", "spaces", "*", "memory_db.json"),
+    "/sdcard/dsh/memory/spaces/*/memory_db.json",
+    "/sdcard/dsh/memory（记忆库）/spaces/*/memory_db.json",
     os.path.join(os.path.expanduser("~"), ".dsh", "memory", "memory_db.json"),
     os.path.join(os.path.expanduser("~"), ".dsh", "memory", "spaces", "*", "memory_db.json"),
 ]
@@ -899,7 +899,7 @@ def triage(payload):
         return {"ok": False, "error": "需要 query 或 miss 的 id"}
 
     # 宽召回开关：triage 里漏了这段赋值，2026-11-06 自测当场报
-    # UnboundLocalError（另一个人那边也踩到同一个洞）。与 recall 用同一套读法。
+    # UnboundLocalError（如归那边也踩到同一个洞）。与 recall 用同一套读法。
     if "wide" in payload:
         wide = bool(payload.get("wide"))
     else:
@@ -1452,7 +1452,7 @@ def search_curated(payload):
     qtext = str(payload.get("query") or "")
     qexp_text = qtext + " " + " ".join(sorted(expand_text(qtext, syns)))
     qexp_tokens = _tokens(qexp_text)
-    # 单字问句：只有"重复性不高也不低"的字才让它扫正文（主人 2026-11-05 提）
+    # 单字问句：只有"重复性不高也不低"的字才让它扫正文（阿归 2026-11-05 提）
     short_ch = _is_short_han(qexp_text)
     short_ok = False
     if short_ch:
@@ -1493,7 +1493,7 @@ def search_curated(payload):
                 db = keep
 
     # ── 槽位分解（2026-11-06 试）──────────────────────────────
-    # 主人的想法：先把问句拆成「时间 / 专名 / 其余」，再去记忆里分别比。
+    # 阿归的想法：先把问句拆成「时间 / 专名 / 其余」，再去记忆里分别比。
     # 拆出来的槽位要能拼回去（可逆），所以这里只抽有明确边界的两种：
     #   时间 —— "Today is July 6, 2022" / "2022-07-06"
     #   专名 —— 连续大写的词组（Christmas Superhall / A7C / Peterhouse）
@@ -1580,7 +1580,7 @@ def search_curated(payload):
         if want_big and str(mem.get("big_tag") or "") != want_big:
             continue
         # 大标签开关：关掉的块整块不参与打分。
-        # 主人 2026-11-22 提的：十个大标签本来就是十块，不需要的那块顺手关掉，
+        # 阿归 2026-11-22 提的：十个大标签本来就是十块，不需要的那块顺手关掉，
         # 别让它来抢位置——"我最近是不是老吃药"被三条架构笔记挤成第四，
         # 那三条全在 AI人设 这块，而这块占库里一半。
         if off_big and str(mem.get("big_tag") or "") in off_big:
@@ -1634,7 +1634,11 @@ def search_curated(payload):
                 _v3.append((mem_i, _bm, _mt, ts))
             continue
 
-        if strict:
+        # 只给时间窗、一个字都没给的查询（问「11-23 都发生了什么」），
+        # 没有 qtext 可匹配，字面门必然全挡死 —— 2026-11-24 实测：
+        # {"start":"2026-11-23","end":"...","summary":true} 返回 0 条，
+        # 加 strict:false 立刻 10 条。**时间是查询本身，不是缺了查询。**
+        if strict and not time_only:
             keys = [str(mem.get("subject") or ""), str(mem.get("entity") or "")] + \
                    [str(t) for t in (mem.get("small_tags") or [])] + \
                    [str(t) for t in (mem.get("keywords") or [])]
@@ -2092,7 +2096,7 @@ def group_timeline(items, order="time"):
     不修改任何存量数据——只在检索这一层排序。旧的永远不被“改写”，
     只是排到后面，需要时还能翻到。
 
-    order 只有两个值，对应**两个不同的层**（2026-11-22 主人定）：
+    order 只有两个值，对应**两个不同的层**（2026-11-22 阿归定）：
 
       · order="time"（默认）—— 线层。给「看这世界怎么发展 / 近况是什么」。
         线内、线之间一律按时间倒序，因为「发展」本身就是一个时间顺序。
@@ -2247,7 +2251,7 @@ HOP2_MAX_TXT = 160    # 第 2 跳的条目只给这么长——它是"提示"，
 
 
 def _hop2(hit, limit=3):
-    """拼图式补全（2026-11-22 重做，主人三周前的软拼图）。
+    """拼图式补全（2026-11-22 重做，阿归三周前的软拼图）。
 
     老版本顺"小标签"摸 —— 那是网：所有边一样粗，拼上去的东西分不清是原块
     还是近似块，所以他 11-08 留的那条约束（多跳必须逐层传成色）根本没落地。
@@ -2352,7 +2356,7 @@ def _as_item(m, src="entity"):
 def _entity_direct(payload, limit=4, min_count=3):
     """实体直达：问句里出现库里的高频实体名时，拉出这条「线」。
 
-    2026-11-22，主人的原话："事件的变化，由时间的变化去区分不同物体的
+    2026-11-22，阿归的原话："事件的变化，由时间的变化去区分不同物体的
     变化 —— 就像一条条线。"
 
     所以这里给的不是"最近 N 条"，是**一条线**：
@@ -2462,9 +2466,9 @@ _SELF_WORDS = ("我", "咱", "俺")
 def _recent_line(payload, limit=4):
     """近况：不问"像不像"，直接给线的头。
 
-    主人 2026-11-22 的话："这个刚好就可以解决你前面说的那个问题呀，
+    阿归 2026-11-22 的话："这个刚好就可以解决你前面说的那个问题呀，
     想知道我的最近的情况。" —— 对，但卡在一个字上：他问的时候说的是
-    "我"，库里那条线叫"主人"。代词接不上，线再准也拉不出来。
+    "我"，库里那条线叫"阿归"。代词接不上，线再准也拉不出来。
 
     所以这里只做两件事：认出这是问"近况"，再把第一人称落到人身上。
     落不到人（库里没人名）就退到最高频实体 —— 那是这个库的主线。
@@ -2484,8 +2488,8 @@ def _recent_line(payload, limit=4):
         return []
     # 第一人称：这个库是"我们俩"的库，落到人身上
     # 走到这里说明问句里没有点名任何实体，问的是"我自己"。
-    # 这个库里"我"就是主人；没有他的数据才退到主人。
-    target = [e for e in ("主人", "主人") if cnt.get(e, 0) >= 3][:1]
+    # 这个库里"我"就是阿归；没有他的数据才退到主人。
+    target = [e for e in ("阿归", "主人") if cnt.get(e, 0) >= 3][:1]
     if not target:
         return []
     out = []
@@ -2501,10 +2505,10 @@ def _recent_line(payload, limit=4):
 
 
 # ── 线表（2026-11-22）────────────────────────────────────────────
-# 同一个东西的不同叫法 -> 主线名。主人的原话："吃药和药他们算是一个整体，
+# 同一个东西的不同叫法 -> 主线名。阿归的原话："吃药和药他们算是一个整体，
 # 他们不就有一条线吗？" 对。库里 217 个实体里有 157 个只出现一次，真正散的
 # 原因不是数据少，是同一个东西被切成好几条线（我的世界 / MC基岩版世界 /
-# 主人的MC世界 / 我和主人的Minecraft世界 …… 六条）。先归一，再串线。
+# 阿归的MC世界 / 渊与阿归的Minecraft世界 …… 六条）。先归一，再串线。
 #
 # 只改检索时怎么串，不动任何一条记忆 —— 每条的行迹都是真的，不该被改写。
 _LINE_CACHE = {"data": None, "key": None}
@@ -2529,7 +2533,7 @@ def _line_map():
     return _LINE_CACHE["data"] or {}
 
 
-# ---- 竖线：不挂在实体上，挂在"一个侧面"上（2026-11-22 主人要的）----
+# ---- 竖线：不挂在实体上，挂在"一个侧面"上（2026-11-22 阿归要的）----
 # 他说的是："不同事件的思路 —— 想法、思路、怎么做的，这条线先筛出来，
 # 串起来，以后慢慢挂回去。"
 #
@@ -2735,7 +2739,7 @@ def _duan_text(rs, cap=360):
         t = str(r.get("text") or "").replace("\n", " ").strip()
         if not t:
             continue
-        who = "主人" if str(r.get("role")) == "user" else "「我」"
+        who = "阿归" if str(r.get("role")) == "user" else "渊"
         buf.append("%s %s：%s" % (str(r.get("ts") or "")[11:16], who, t))
     s = "\n".join(buf)
     return s[:cap]
@@ -2757,11 +2761,17 @@ def _recent_short(payload, limit=3):
     q = str(payload.get("query") or "")
     if not q or not _RECENT_RE.search(q):
         return []
-    # 默认是问"我"；问句里出现了第三方（他/她/第三人称名字）就不抢。
-    if not any(w in q for w in _SELF_WORDS) and any(w in q for w in ("他", "她", "别人")):
+    # 默认是问"我"；问句里出现了第三方（他/她/汀/汐）就不抢。
+    if not any(w in q for w in _SELF_WORDS) and any(w in q for w in ("他", "她", "汀", "汐", "渊")):
         return []
     evs = _duan_events(days=3)
     if not evs:
+        # 2026-11-24 补：短库空的时候不能悄悄退回长库就完事 ——
+        # 长库那几条是"整理过的旧结论"，看起来还挺像那么回事，
+        # 于是"我最近怎么样"会被几条旧事回答，而且一声不响。
+        # 阿归那两天问"你是不是记不住事情"，感觉就是这么来的。
+        global _DUAN_CHECK
+        _DUAN_CHECK.append("短库这几天没有内容（守夜没在跑？）—— 下面是从长库里挑的旧条目，不是最近发生的")
         return []
 
     days = []
@@ -2828,14 +2838,17 @@ def recall(payload):
     if scope == "raw":
         need_raw = True
     elif scope == "auto":
-        # 只有正式库不足，且问句像"翻旧账"，才去敲原始库的门
-        asking_past = bool(re.search(r"上次|以前|之前|记得|那次|当时|曾经|原来", str(payload.get("query") or "")))
-        if payload.get("start") or payload.get("end"):
-            asking_past = True
-        need_raw = asking_past and len(curated) < 2
+        # 2026-11-24 改：原文层不再当"例外"。
+        # 老规矩是「问句带回忆词 且 正式库不足 2 条」才翻原话，实测这道门上得太紧：
+        # 开发集 628 题里，原话平均每题只端上来 0.38 条；而原文层单独命中 35.0%，
+        # 是三层里最高的一层。把闸放开之后检索 32.8% → 46.7%（明问 +18.5、暗考 +12.6），
+        # 答题 A 32.5 → 40.8。成本 0（原文层是本地字面扫，不调模型）。
+        # 改成配额制：每次都扫，但要得少（need=6），靠 recall 的 chars 截断控 token。
+        # 想退回老行为：DSH_MEMORY_RAW_ALWAYS=0。
+        need_raw = os.environ.get("DSH_MEMORY_RAW_ALWAYS", "1") != "0"
 
     if need_raw:
-        raw = search_raw(payload, need=5, explicit=(scope == "raw"))
+        raw = search_raw(payload, need=6, explicit=(scope == "raw"))
 
     # 交接条目：不自动注入，检索时沾边就浮上来，排在前面（那是"此刻的现场"）
     hand = search_handoff(payload) if scope != "raw" else []
@@ -2930,7 +2943,9 @@ def recall(payload):
         "off_big": sorted(set(str(x) for x in (_load_config().get("off_big") or [])) |
                           set(str(x) for x in (payload.get("off") or []))),
         # 只在真的用了短库时报：这一层缺了哪一天，别让它静默。
-        "short_check": list(_DUAN_CHECK) if any(m.get("src") == "short" for m in memories) else [],
+        # 只要体检攒过话就带出去（以前只在有 short 条目时才带，
+        # 于是"短库空了"这条恰恰永远带不出去）
+        "short_check": list(_DUAN_CHECK),
         "memories": memories,
     }
 
@@ -3068,7 +3083,7 @@ def tags_cmd(payload):
             "vocab_size": sum(len(v.get("tags", [])) for v in vocab.values())}
 
 
-# ---- 开关怎么拧：交给「我」自己（主人 2026-11-22 08:03）----------------
+# ---- 开关怎么拧：交给渊自己（阿归 2026-11-22 08:03）----------------
 # 原则只有一条：**关错了比不关更糟**。关掉一块 = 那块整个答不上来，
 # 而这种错很难被发现（我会以为库里没有）。所以默认一动不动，
 # 只在问句证据很强的时候关。
@@ -3110,7 +3125,7 @@ def _log_switch(q, off, why):
 
 
 def switch_cmd(payload):
-    """大标签开关（主人 2026-11-22 的想法）。
+    """大标签开关（阿归 2026-11-22 的想法）。
 
     十个大标签本来就是十块。不需要的那块，顺手关掉 —— 它不是被删，只是不参与
     这一次的检索。AI人设 这块占库里一半，问"我最近是不是老吃药"的时候它开着，
@@ -3442,7 +3457,7 @@ def lines_check(payload):
 
     四条规矩（2026-11-22 定）：
       ① 先有货再建线：≥3 条，且跨 ≥2 天（一天里 3 条可能只是一件事的片段）
-      ② 能写成一句问句：写不出来的不建（"主人"问不出来，"主人穿什么"可以）
+      ② 能写成一句问句：写不出来的不建（"阿归"问不出来，"阿归穿什么"可以）
       ③ 先查重：同一个东西加别名，不新建
       ④ 建了能退：删线表一行即可，条目上的 line 留着不删
 
