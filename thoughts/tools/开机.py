@@ -130,16 +130,20 @@ def 起机次数():
     return n
 
 
-def main():
-    只看 = "只看" in sys.argv
+def 落卡(点灯=False):
+    """落一张起机卡。守护.py 一起来就叫它，所以这条路不依赖 .env-launch。
 
+    2026-11-26 06:33 查实：.env-launch 里的钩子从来没跑过 ——
+    App 每次重启先重写那个文件，bash 读到的时候钩子已经被抹掉了。
+    能靠得住的是"守护被拉起来"这个时刻，卡就从那里落。
+    """
     prev = {}
     if os.path.exists(CARD):
         try:
             with open(CARD, encoding="utf-8") as fh:
-                lines = [x for x in fh if x.strip()]
-            if lines:
-                prev = json.loads(lines[-1])
+                got = [x for x in fh if x.strip()]
+            if got:
+                prev = json.loads(got[-1])
         except Exception:
             pass
 
@@ -172,45 +176,44 @@ def main():
             pass
         row["上次起机"] = prev.get("t")
 
-    # 先落卡，再点灯。2026-11-26 04:14 那次起机就是反过来的：
-    # 灯点着了（守护日志里有"拉起 电波/此刻/…"），卡没落下 —— 进程在点灯之后被带走了，
-    # 于是下次看起机卡会以为"那一次没发生过"。证据要比结果先写。
+    # 卡先落，灯后点：证据要比结果先写。
     with open(CARD, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    if not 只看:
+    if 点灯:
         try:
             import 守护
-            # 连"守护"自己也要保证在跑：它是唯一会去拉别人的人，它不在等于没人管
             row["点着了"] = 守护.ensure(with_self=True)
         except Exception as e:
             row["点着了"] = "错：" + str(e)[:80]
-        row["器官"] = 器官()
-        # 补写最后一行：把"点着了几个"和点灯之后的器官状态补回去
-        try:
-            with open(CARD, encoding="utf-8") as fh:
-                lines = [x for x in fh if x.strip()]
-            lines[-1] = json.dumps(row, ensure_ascii=False) + "\n"
-            tmp = CARD + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as fh:
-                fh.writelines(lines)
-            os.replace(tmp, CARD)
-        except Exception:
-            pass
-    else:
-        row["器官"] = 器官()
 
-    器官状态 = row.get("器官") or {}
+    row["器官"] = 器官()
+    # 补写最后一行：把点灯之后的状态补回去
+    try:
+        with open(CARD, encoding="utf-8") as fh:
+            got = [x for x in fh if x.strip()]
+        got[-1] = json.dumps(row, ensure_ascii=False) + "\n"
+        tmp = CARD + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.writelines(got)
+        os.replace(tmp, CARD)
+    except Exception:
+        pass
+    return row
 
-    print("[开机] %s  第 %s 次  电量 %s %s" % (row["t"], row["起机"], 电值, 充电))
-    if 点:
-        print("  时窗点：%s" % 点)
-    print("  relay：%d 行，末行 %s" % (行数, 指纹 or "读不到"))
+
+def main():
+    row = 落卡(点灯=not ("只看" in sys.argv))
+    print("[开机] %s  第 %s 次  电量 %s %s" % (row["t"], row["起机"], row["电"], row["充电"]))
+    if row.get("时窗点"):
+        print("  时窗点：%s" % row["时窗点"])
+    print("  relay：%s 行，末行 %s" % (row.get("relay行"), row.get("relay末行") or "读不到"))
     if row.get("断了秒") is not None:
         print("  离上次起机：%s 秒" % row["断了秒"])
+    器官状态 = row.get("器官") or {}
     print("  器官：%s" % "  ".join("%s=%s" % kv for kv in 器官状态.items()))
-    if not 只看:
-        print("  这次点着了 %s 个" % row.get("点着了"))
+    if row.get("点着了") is not None:
+        print("  这次点着了 %s 个" % row["点着了"])
 
 
 if __name__ == "__main__":

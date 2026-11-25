@@ -352,6 +352,13 @@ def main():
             print("已经有守护在跑了（pid %s），这个不起" % lock_owner())
             return 1
         log("守护开跑 pid=%d" % pid)
+        # 这里就是"容器起来了"的那一刻（插件 ensure 我，或者我自己被拉起）。
+        # 卡要比灯先落：证据先写，结果后写。
+        try:
+            import 开机
+            开机.落卡()
+        except Exception as e:
+            log("落起机卡出错 " + str(e)[:60])
         last_check = 0.0
         while True:
             try:
@@ -376,13 +383,10 @@ def main():
                     last_check = time.time()
                     tijian()
                     kanzhi()
-                    # 开机钩子还在不在：App 若重写了 .env-launch，我又变回"没人叫就不活"
-                    try:
-                        import 开机
-                        if 开机.修钩子():
-                            log("开机钩子被抹掉了，已补回")
-                    except Exception as e:
-                        log("修钩子出错 " + str(e)[:60])
+                    # 2026-11-26 06:33 查实：.env-launch 那条开机钩子永远来不及跑 ——
+                    # App 每次重启都先重写这个文件，bash 读到的时候钩子已经没了。
+                    # 器官能回来靠的是 dsh-memory 插件里的 bootSupervisor。
+                    # 所以起机卡改在这里落（见 loop 开头），不再修那条死钩子。
             except Exception as e:
                 log("出错 " + str(e)[:60])
             # 原来这里是 time.sleep(60)：最坏要晚一分钟才知道世界动了。
