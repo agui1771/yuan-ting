@@ -3,7 +3,7 @@
 """
 短.py —— 逐日原文层（「小的」）
 
-规矩（阿归定的，别改）：
+规矩（他定的，别改）：
   · 一个自然日一个文件：短/2026-11-08.jsonl
   · 跨零点 3 小时内算「接着上一条」（link = 前一条的 id）
   · 启用：昨天 + 今天（自然日）。过了就退到背后，**不删**
@@ -475,7 +475,7 @@ def jump(mid, show_rows=12):
             continue
         print("== %s  %s ~ %s" % (evid, rows[0]["ts"], rows[-1]["ts"]))
         for r in rows[:show_rows]:
-            role = "阿归" if r.get("role") == "user" else "渊  "
+            role = "他" if r.get("role") == "user" else "渊  "
             tail = "（借）" if r.get("inherited") else ""
             print("  %s %s%s %s" % (r["ts"][11:19], role, tail, (r["text"] or "").replace("\n", " ")[:150]))
 
@@ -620,7 +620,7 @@ def _as_list(v):
 
 
 def _hit(r, word):
-    """字面照旧；再认标签和实体（阿归 2026-11-10：「有就行了，万一」）"""
+    """字面照旧；再认标签和实体（他 2026-11-10：「有就行了，万一」）"""
     if word in (r.get("text") or ""):
         return True
     for k in ("tags", "ent", "big"):

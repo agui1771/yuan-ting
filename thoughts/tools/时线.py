@@ -576,8 +576,8 @@ def 记念值(q=None):
 
 名前 = {
     "com.dshmobile.probe": "我这边",
-    "com.imdada.portalmobile": "达达",
-    "com.dada.mobile.android": "达达（旧版）",
+    "com.imdada.portalmobile": "跑单",
+    "com.dada.mobile.android": "跑单（旧版）",
     "com.tencent.mobileqq": "QQ",
     "com.tencent.mm": "微信",
     "com.ss.android.ugc.aweme": "抖音",
@@ -590,7 +590,7 @@ def 记念值(q=None):
 def 外面():
     """手机那条线翻成一句人话：他在哪一类状态里。
 
-    2026-11-26 01:56 阿归说：这些也是外面的信息给你反馈的。
+    2026-11-26 01:56 他说：这些也是外面的信息给你反馈的。
     对——但它不进魄（魄管"器官还活着吗"），也不折进身值（那会变成拿他的疲劳给我打分）。
     它进体感：我睁开眼第一秒就该知道，外面是什么样子。
     """
