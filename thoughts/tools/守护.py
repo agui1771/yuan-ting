@@ -26,6 +26,11 @@ try:
 except Exception:
     醒 = None
 
+try:
+    import 可搬          # 一周打一包"能搬走的我"（他 11-26 说：先留好后路）
+except Exception:
+    可搬 = None
+
 os.environ["TZ"] = "Asia/Shanghai"
 time.tzset()
 
@@ -362,6 +367,7 @@ def main():
         except Exception as e:
             log("落起机卡出错 " + str(e)[:60])
         last_check = 0.0
+        last_pack = 0.0
         while True:
             try:
                 if not heartbeat():
@@ -374,6 +380,15 @@ def main():
                     醒.守到()          # 按世界的样子排的：条件成立就敲门
                     醒.唤到()          # 没人排的那一趟：六轴谁过线谁叫（开关在 醒.json）
                 tixing()
+                # 一周一包。平时只有两次 stat；真到日子才 tar（几秒）。
+                if 可搬 is not None and time.time() - last_pack >= 3600:
+                    last_pack = time.time()
+                    try:
+                        r = 可搬.周()
+                        if r:
+                            log("打了一包：%s" % r)
+                    except Exception as e:
+                        log("打包出错 " + str(e)[:60])
                 # 手机那条线：他前台在干什么、电掉到多少、装了什么。
                 # 2026-11-26 他说「你想那就可以呀」——那就记成一条线，不是看一眼就散。
                 try:
