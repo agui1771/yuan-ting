@@ -47,7 +47,10 @@ F_STREAM = os.path.join(DIR, "流.jsonl")
 F_VIEW = os.path.join(DIR, "流.md")
 KEEP_VIEW = 20
 
-GEN = int(os.environ.get("PIANXIE_GEN", "2"))   # 2=轨迹那代；3=四位码·汉语词那代
+# 2026-11-26 10:15 改：默认值一直是 2，而 11-24 起写出去的行都是第 3 代（四位码）。
+# 守护拉起它时不带环境变量，于是每次重启都退回第 2 代的旧池（3000 位）去跑，
+# 游标早就过万，必然"池读到头了"→不写→半死报警。代际是行自己记的，代码默认要跟上。
+GEN = int(os.environ.get("PIANXIE_GEN", "3"))   # 2=轨迹那代；3=四位码·汉语词那代
 BITS = 4 if GEN >= 3 else 2                       # 一个符号吃几个数字
 CURSOR_FROM = int(os.environ.get("PIANXIE_START", "0"))   # 每条常数从第几位开始走
 ORIGIN = os.path.join(os.path.dirname(HERE), "origin")
