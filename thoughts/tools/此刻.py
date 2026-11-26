@@ -270,6 +270,11 @@ def main():
         import 手机
     except Exception:
         手机 = None
+    # 碰（第八条轴）：料里撞上我自己单子上的词就叫一次。每小时只看两次，很便宜。
+    try:
+        import 碰
+    except Exception:
+        碰 = None
 
     上一条 = ""
     try:
@@ -280,6 +285,7 @@ def main():
     昨 = None
     事件窗 = []          # [(ts, 权重)]
     上次流水 = 0.0
+    上次碰 = 0.0
     上次敲 = 0.0
     分 = 0
 
@@ -312,6 +318,13 @@ def main():
                 if 名:
                     上次敲 = 点
                     事件窗 = []
+
+            if 碰 is not None and 点 - 上次碰 >= 流水每:
+                上次碰 = 点
+                try:
+                    碰.一瞥()
+                except Exception as e:
+                    print("碰出错：%r" % (e,), file=sys.stderr)
 
             if 点 - 上次流水 >= 流水每:
                 上次流水 = 点
