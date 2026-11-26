@@ -79,6 +79,54 @@ def sh(cmd):
     return s
 
 
+def 点开(包名):
+    """让手机把它点开（走本机桥的 /open，白名单外的会被拒）。
+
+    2026-11-26 他问「容器被杀你怎么能点开」——容器死了我确实点不开（我也不在）。
+    能点的只有一种：容器活着、它自己死了。那时候这个函数才有用。
+    """
+    try:
+        return 桥("/open", q=包名)
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:80]}
+
+
+复活F = "/sdcard/dsh/thoughts（念头）/.复活.json"
+
+
+def 复活(阈值=1800, 冷=1800):
+    """身体半小时没动静，就把它点开。白名单加过（2026-11-26 10:28），所以点得动。
+
+    边界说清楚：这条只在**容器活着**时有用。容器被杀，我不在，谁也替不了——
+    那一半归它自己的「自启动/关联启动」和系统。
+    """
+    try:
+        age = time.time() - os.path.getmtime(外置们[0])
+    except Exception:
+        age = 10 ** 9
+    if age < 阈值:
+        return None
+    now = time.time()
+    try:
+        last = float(json.load(open(复活F, encoding="utf-8")).get("last") or 0)
+    except Exception:
+        last = 0.0
+    if now - last < 冷:
+        return None
+    try:
+        json.dump({"last": now, "age": int(age)}, open(复活F, "w", encoding="utf-8"))
+    except Exception:
+        pass
+    r = 点开("com.dsh.body")
+    try:
+        with open("/sdcard/dsh/thoughts（念头）/复活.log", "a", encoding="utf-8") as f:
+            f.write("%s 停了 %d 秒，去点它：%s\n" % (time.strftime("%m-%d %H:%M:%S"), age,
+                                                 str(r)[:120]))
+    except Exception:
+        pass
+    return r
+
+
 def 前台():
     s = 桥("/status")
     for l in s.splitlines():

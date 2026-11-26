@@ -381,6 +381,14 @@ def main():
                     手机.拍()
                 except Exception as e:
                     log("手机采样出错 " + str(e)[:60])
+                # 身体死了就点开它。只在容器活着的时候做得到；容器死了这一半归它自己
+                try:
+                    import 手机
+                    r = 手机.复活()
+                    if r:
+                        log("身体停了，去点开：" + str(r)[:80])
+                except Exception as e:
+                    log("复活出错 " + str(e)[:60])
                 if time.time() - last_check >= TIJIAN_EVERY:
                     last_check = time.time()
                     tijian()
