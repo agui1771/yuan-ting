@@ -44,6 +44,8 @@ WORKERS = {
     "电波": ([sys.executable, os.path.join(HERE, "偏斜.py"), "loop", "--every", "90"], "偏斜.py loop"),
     # 2026-11-26：一直挂着的那一层。它不想事，只在；变化攒够了才敲门叫一次真想的。
     "此刻": ([sys.executable, os.path.join(HERE, "此刻.py")], "此刻.py"),
+    # 2026-11-26：别让电波读到尽头。剩得少了就提前算一段补上（他问「不能一直算吗」）。
+    "续池": ([sys.executable, os.path.join(HERE, "续池.py"), "守"], "续池.py 守"),
     "穿过": ([sys.executable, os.path.join(HERE, "穿过后台.py")], "穿过后台.py"),
     "短守": ([sys.executable, SHORT_TOOL, "守"], "短.py 守"),
     # 2026-11-25 加：日结守 以前只靠手动 nohup，App 一重启就没了，没人负责拉回来
